@@ -165,7 +165,7 @@ print(f"\nARIMA MAE for VALUE: {mae_value_arima}")
 print(f"ARIMA RMSE for VALUE: {rmse_value_arima}")
 
 # ETS forecasting for VALUE
-model_ets = ExponentialSmoothing(time_series_data['VALUE'], seasonal='add', seasonal_periods=12)
+model_ets = ExponentialSmoothing(time_series_data['VALUE'], seasonal='add', seasonal_periods=12, initialization_method='estimated')
 model_ets_fit = model_ets.fit()
 forecast_value_ets = model_ets_fit.forecast(steps=12)
 print("\nETS model summary for VALUE:")
@@ -198,3 +198,17 @@ print("\nModel comparison for VALUE:")
 print(f"ARIMA MAE: {mae_value_arima}, RMSE: {rmse_value_arima}")
 print(f"ETS MAE: {mae_value_ets}, RMSE: {rmse_value_ets}")
 print(f"Prophet MAE: {mae_value_prophet}, RMSE: {rmse_value_prophet}")
+
+# Identify anomalies using Z-score
+time_series_data['Z_SCORE'] = (time_series_data['VALUE'] - time_series_data['VALUE'].mean()) / time_series_data['VALUE'].std()
+anomalies_z_score = time_series_data[time_series_data['Z_SCORE'].abs() > 3]
+print("\nAnomalies detected using Z-score method:")
+print(anomalies_z_score[['Month-Year', 'VALUE', 'Z_SCORE']])
+
+# Identify anomalies using IQR
+Q1 = time_series_data['VALUE'].quantile(0.25)
+Q3 = time_series_data['VALUE'].quantile(0.75)
+IQR = Q3 - Q1
+anomalies_iqr = time_series_data[(time_series_data['VALUE'] < (Q1 - 1.5 * IQR)) | (time_series_data['VALUE'] > (Q3 + 1.5 * IQR))]
+print("\nAnomalies detected using IQR method:")
+print(anomalies_iqr[['Month-Year', 'VALUE']])
