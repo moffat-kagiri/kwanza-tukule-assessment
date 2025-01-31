@@ -62,7 +62,7 @@ if not os.path.exists(output_dir):
     os.makedirs(output_dir)
 
 # Save the cleaned data to a new CSV file
-df.to_csv(os.path.join(output_dir, 'cleaned_data.csv'), index=False)
+df.to_csv(os.path.join(output_dir, 'cleaned_sales_data.csv'), index=False)
 
 # Aggregate 'QUANTITY' and 'VALUE' by 'ANONYMIZED CATEGORY' and then by 'ANONYMIZED BUSINESS'
 aggregated_data = df.groupby(['ANONYMIZED CATEGORY', 'ANONYMIZED BUSINESS']).agg({'QUANTITY': 'sum', 'VALUE': 'sum'}).reset_index()
@@ -165,7 +165,8 @@ print(f"\nARIMA MAE for VALUE: {mae_value_arima}")
 print(f"ARIMA RMSE for VALUE: {rmse_value_arima}")
 
 # ETS forecasting for VALUE
-model_ets = ExponentialSmoothing(time_series_data['VALUE'], seasonal='add', seasonal_periods=12, initialization_method='estimated')
+# Adjust the seasonal_periods to match the length of your data if necessary
+model_ets = ExponentialSmoothing(time_series_data['VALUE'], seasonal='add', seasonal_periods=3, initialization_method='estimated')
 model_ets_fit = model_ets.fit()
 forecast_value_ets = model_ets_fit.forecast(steps=3)
 print("\nETS model summary for VALUE:")
