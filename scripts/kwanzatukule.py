@@ -1,9 +1,9 @@
-# Import required modules
+import os
 import pandas as pd
 import numpy as np
-import os
 import matplotlib.pyplot as plt
 import seaborn as sns
+import openpyxl
 from sklearn.cluster import KMeans
 from statsmodels.tsa.arima.model import ARIMA
 from statsmodels.tsa.holtwinters import ExponentialSmoothing
@@ -47,7 +47,7 @@ print(f"Invalid quantities: {invalid_quantities}")
 print(f"Invalid unit prices: {invalid_unit_prices}")
 
 # Create "Month-Year" feature from 'DATE'
-df['Month-Year'] = df['DATE'].dt.strftime('%B %Y')
+df['Month-Year'] = df['DATE'].dt.to_period('M')
 
 # Verify the new feature
 print("\nSample of 'Month-Year' feature:")
@@ -60,9 +60,6 @@ df['VALUE'] = df['QUANTITY'] * df['UNIT PRICE']
 output_dir = 'data'
 if not os.path.exists(output_dir):
     os.makedirs(output_dir)
-
-# Save the cleaned data to a new CSV file
-df.to_csv(os.path.join(output_dir, 'cleaned_sales_data.csv'), index=False)
 
 # Aggregate 'QUANTITY' and 'VALUE' by 'ANONYMIZED CATEGORY' and then by 'ANONYMIZED BUSINESS'
 aggregated_data = df.groupby(['ANONYMIZED CATEGORY', 'ANONYMIZED BUSINESS']).agg({'QUANTITY': 'sum', 'VALUE': 'sum'}).reset_index()
@@ -96,7 +93,10 @@ print(business_aggregated)
 time_series_data = df.groupby('Month-Year').agg({'QUANTITY': 'sum', 'VALUE': 'sum'}).reset_index()
 
 # Convert 'Month-Year' to datetime for plotting
-time_series_data['Month-Year'] = pd.to_datetime(time_series_data['Month-Year'], format='%B %Y')
+time_series_data['Month-Year'] = time_series_data['Month-Year'].dt.to_timestamp()
+
+# Ensure the data is sorted by date
+time_series_data = time_series_data.sort_values(by='Month-Year')
 
 # Set the theme for the plots
 sns.set_theme(style="darkgrid", palette="dark")
@@ -112,7 +112,8 @@ plt.legend()
 plt.xticks(rotation=45)
 plt.grid(True)
 plt.tight_layout()
-plt.show()
+plt.savefig(os.path.join(output_dir, 'time_series_plot.png'))
+plt.close()
 
 # Determine the top 5 most frequently purchased products by quantity
 top_5_products_by_quantity = df.groupby('ANONYMIZED PRODUCT').agg({'QUANTITY': 'sum'}).reset_index().sort_values(by='QUANTITY', ascending=False).head(5)
@@ -182,7 +183,7 @@ print(f"ETS RMSE for VALUE: {rmse_value_ets}")
 df_prophet = time_series_data[['Month-Year', 'VALUE']].rename(columns={'Month-Year': 'ds', 'VALUE': 'y'})
 model_prophet = Prophet()
 model_prophet.fit(df_prophet)
-future = model_prophet.make_future_dataframe(periods=3, freq='M')
+future = model_prophet.make_future_dataframe(periods=3, freq='MS')
 forecast_value_prophet = model_prophet.predict(future)
 forecast_value_prophet = forecast_value_prophet[['ds', 'yhat']].tail(3)['yhat']
 print("\nProphet forecast for VALUE:")
@@ -200,12 +201,20 @@ print(f"ARIMA MAE: {mae_value_arima}, RMSE: {rmse_value_arima}")
 print(f"ETS MAE: {mae_value_ets}, RMSE: {rmse_value_ets}")
 print(f"Prophet MAE: {mae_value_prophet}, RMSE: {rmse_value_prophet}")
 
+# Create a DataFrame for the forecasts
+forecast_df = pd.DataFrame({
+    'Month-Year': pd.date_range(start=time_series_data['Month-Year'].iloc[-1], periods=4, freq='MS')[1:],
+    'ARIMA Forecast': forecast_value,
+    'ETS Forecast': forecast_value_ets,
+    'Prophet Forecast': forecast_value_prophet
+})
+
 # Plot the forecasts
 plt.figure(figsize=(14, 7))
 plt.plot(time_series_data['Month-Year'], time_series_data['VALUE'], label='Actual', marker='o')
-plt.plot(pd.date_range(start=time_series_data['Month-Year'].iloc[-1], periods=4, freq='M')[1:], forecast_value, label='ARIMA Forecast', marker='o')
-plt.plot(pd.date_range(start=time_series_data['Month-Year'].iloc[-1], periods=4, freq='M')[1:], forecast_value_ets, label='ETS Forecast', marker='o')
-plt.plot(pd.date_range(start=time_series_data['Month-Year'].iloc[-1], periods=4, freq='M')[1:], forecast_value_prophet, label='Prophet Forecast', marker='o')
+plt.plot(forecast_df['Month-Year'], forecast_df['ARIMA Forecast'], label='ARIMA Forecast', marker='o')
+plt.plot(forecast_df['Month-Year'], forecast_df['ETS Forecast'], label='ETS Forecast', marker='o')
+plt.plot(forecast_df['Month-Year'], forecast_df['Prophet Forecast'], label='Prophet Forecast', marker='o')
 plt.title('3-Month Forecasts of Value using ARIMA, ETS, and Prophet')
 plt.xlabel('Month-Year')
 plt.ylabel('Value')
@@ -213,4 +222,25 @@ plt.legend()
 plt.xticks(rotation=45)
 plt.grid(True)
 plt.tight_layout()
-plt.show()
+plt.savefig(os.path.join(output_dir, 'forecast_plot.png'))
+plt.close()
+
+# Save all outputs to an Excel file
+output_excel_path = os.path.join(output_dir, 'cleaned_sales_data.xlsx')
+with pd.ExcelWriter(output_excel_path, engine='openpyxl') as writer:
+    df.to_excel(writer, sheet_name='Cleaned Data', index=False)
+    aggregated_data.to_excel(writer, sheet_name='Aggregated Data', index=False)
+    category_aggregated.to_excel(writer, sheet_name='Category Aggregated', index=False)
+    business_aggregated.to_excel(writer, sheet_name='Business Aggregated', index=False)
+    time_series_data.to_excel(writer, sheet_name='Time Series Data', index=False)
+    top_5_products_by_quantity.to_excel(writer, sheet_name='Top 5 Products by Quantity', index=False)
+    top_5_products_by_value.to_excel(writer, sheet_name='Top 5 Products by Value', index=False)
+    forecast_df.to_excel(writer, sheet_name='Forecasts', index=False)
+    # Save the plots as images and insert them into the Excel file
+    workbook = writer.book
+    worksheet = workbook.create_sheet('Time Series Plot')
+    worksheet.add_image(openpyxl.drawing.image.Image(os.path.join(output_dir, 'time_series_plot.png')), 'A1')
+    worksheet = workbook.create_sheet('Forecast Plot')
+    worksheet.add_image(openpyxl.drawing.image.Image(os.path.join(output_dir, 'forecast_plot.png')), 'A1')
+
+print(f"\nAll outputs have been saved to {output_excel_path}")
