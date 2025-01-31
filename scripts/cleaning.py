@@ -6,6 +6,9 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.cluster import KMeans
 from statsmodels.tsa.arima.model import ARIMA
+from statsmodels.tsa.holtwinters import ExponentialSmoothing
+from prophet import Prophet
+from sklearn.metrics import mean_absolute_error, mean_squared_error
 
 # Load the CSV file into a DataFrame
 df = pd.read_csv('data/raw_data.csv')
@@ -44,7 +47,7 @@ print(f"Invalid quantities: {invalid_quantities}")
 print(f"Invalid unit prices: {invalid_unit_prices}")
 
 # Create "Month-Year" feature from 'DATE'
-df['Month-Year'] = df['DATE'].dt.strftime('%Y-%m')
+df['Month-Year'] = df['DATE'].dt.strftime('%B %Y')
 
 # Verify the new feature
 print("\nSample of 'Month-Year' feature:")
@@ -93,7 +96,7 @@ print(business_aggregated)
 time_series_data = df.groupby('Month-Year').agg({'QUANTITY': 'sum', 'VALUE': 'sum'}).reset_index()
 
 # Convert 'Month-Year' to datetime for plotting
-time_series_data['Month-Year'] = pd.to_datetime(time_series_data['Month-Year'])
+time_series_data['Month-Year'] = pd.to_datetime(time_series_data['Month-Year'], format='%B %Y')
 
 # Set the theme for the plots
 sns.set_theme(style="darkgrid", palette="dark")
@@ -155,13 +158,43 @@ forecast_value = model_value_fit.forecast(steps=12)
 print("\nForecasted VALUE for the next 12 months:")
 print(forecast_value)
 
-# ARIMA forecasting for QUANTITY
-model_quantity = ARIMA(time_series_data['QUANTITY'], order=(5, 1, 0))
-model_quantity_fit = model_quantity.fit()
-print("\nARIMA model summary for QUANTITY:")
-print(model_quantity_fit.summary())
+# Calculate error metrics for ARIMA
+mae_value_arima = mean_absolute_error(time_series_data['VALUE'][-12:], forecast_value)
+rmse_value_arima = np.sqrt(mean_squared_error(time_series_data['VALUE'][-12:], forecast_value))
+print(f"\nARIMA MAE for VALUE: {mae_value_arima}")
+print(f"ARIMA RMSE for VALUE: {rmse_value_arima}")
 
-# Forecast QUANTITY
-forecast_quantity = model_quantity_fit.forecast(steps=12)
-print("\nForecasted QUANTITY for the next 12 months:")
-print(forecast_quantity)
+# ETS forecasting for VALUE
+model_ets = ExponentialSmoothing(time_series_data['VALUE'], seasonal='add', seasonal_periods=12)
+model_ets_fit = model_ets.fit()
+forecast_value_ets = model_ets_fit.forecast(steps=12)
+print("\nETS model summary for VALUE:")
+print(model_ets_fit.summary())
+
+# Calculate error metrics for ETS
+mae_value_ets = mean_absolute_error(time_series_data['VALUE'][-12:], forecast_value_ets)
+rmse_value_ets = np.sqrt(mean_squared_error(time_series_data['VALUE'][-12:], forecast_value_ets))
+print(f"\nETS MAE for VALUE: {mae_value_ets}")
+print(f"ETS RMSE for VALUE: {rmse_value_ets}")
+
+# Prophet forecasting for VALUE
+df_prophet = time_series_data[['Month-Year', 'VALUE']].rename(columns={'Month-Year': 'ds', 'VALUE': 'y'})
+model_prophet = Prophet()
+model_prophet.fit(df_prophet)
+future = model_prophet.make_future_dataframe(periods=12, freq='M')
+forecast_value_prophet = model_prophet.predict(future)
+forecast_value_prophet = forecast_value_prophet[['ds', 'yhat']].tail(12)['yhat']
+print("\nProphet forecast for VALUE:")
+print(forecast_value_prophet)
+
+# Calculate error metrics for Prophet
+mae_value_prophet = mean_absolute_error(time_series_data['VALUE'][-12:], forecast_value_prophet)
+rmse_value_prophet = np.sqrt(mean_squared_error(time_series_data['VALUE'][-12:], forecast_value_prophet))
+print(f"\nProphet MAE for VALUE: {mae_value_prophet}")
+print(f"Prophet RMSE for VALUE: {rmse_value_prophet}")
+
+# Compare models based on error metrics
+print("\nModel comparison for VALUE:")
+print(f"ARIMA MAE: {mae_value_arima}, RMSE: {rmse_value_arima}")
+print(f"ETS MAE: {mae_value_ets}, RMSE: {rmse_value_ets}")
+print(f"Prophet MAE: {mae_value_prophet}, RMSE: {rmse_value_prophet}")
