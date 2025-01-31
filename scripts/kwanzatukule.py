@@ -47,7 +47,7 @@ print(f"Invalid quantities: {invalid_quantities}")
 print(f"Invalid unit prices: {invalid_unit_prices}")
 
 # Create "Month-Year" feature from 'DATE'
-df['Month-Year'] = df['DATE'].dt.to_period('M')
+df['Month-Year'] = df['DATE'].dt.strftime('%B %Y')
 
 # Verify the new feature
 print("\nSample of 'Month-Year' feature:")
@@ -228,6 +228,14 @@ plt.close()
 # Save all outputs to an Excel file
 output_excel_path = os.path.join(output_dir, 'cleaned_sales_data.xlsx')
 with pd.ExcelWriter(output_excel_path, engine='openpyxl') as writer:
+    # Save error metrics and model comparison to Excel
+    error_metrics_df = pd.DataFrame({
+        'Model': ['ARIMA', 'ETS', 'Prophet'],
+        'MAE': [mae_value_arima, mae_value_ets, mae_value_prophet],
+        'RMSE': [rmse_value_arima, rmse_value_ets, rmse_value_prophet]
+    })
+    error_metrics_df.to_excel(writer, sheet_name='Error Metrics', index=False)
+    
     df.to_excel(writer, sheet_name='Cleaned Data', index=False)
     aggregated_data.to_excel(writer, sheet_name='Aggregated Data', index=False)
     category_aggregated.to_excel(writer, sheet_name='Category Aggregated', index=False)
@@ -236,6 +244,7 @@ with pd.ExcelWriter(output_excel_path, engine='openpyxl') as writer:
     top_5_products_by_quantity.to_excel(writer, sheet_name='Top 5 Products by Quantity', index=False)
     top_5_products_by_value.to_excel(writer, sheet_name='Top 5 Products by Value', index=False)
     forecast_df.to_excel(writer, sheet_name='Forecasts', index=False)
+    
     # Save the plots as images and insert them into the Excel file
     workbook = writer.book
     worksheet = workbook.create_sheet('Time Series Plot')
