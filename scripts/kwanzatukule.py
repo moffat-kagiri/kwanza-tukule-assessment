@@ -62,12 +62,7 @@ if not os.path.exists(output_dir):
     os.makedirs(output_dir)
 
 # Save the cleaned data to a new CSV file
-df.to_csv(os.path.join(output_dir, 'cleaned_sales_data.csv'), index=False)
-
-# View Summary Statistics
-summary_statistics = df.describe()
-print("\nSummary Statistics:")
-print(summary_statistics)
+df.to_csv(os.path.join(output_dir, 'cleaned_data.csv'), index=False)
 
 # Aggregate 'QUANTITY' and 'VALUE' by 'ANONYMIZED CATEGORY' and then by 'ANONYMIZED BUSINESS'
 aggregated_data = df.groupby(['ANONYMIZED CATEGORY', 'ANONYMIZED BUSINESS']).agg({'QUANTITY': 'sum', 'VALUE': 'sum'}).reset_index()
@@ -158,27 +153,27 @@ model_value_fit = model_value.fit()
 print("\nARIMA model summary for VALUE:")
 print(model_value_fit.summary())
 
-# Forecast VALUE
-forecast_value = model_value_fit.forecast(steps=12)
-print("\nForecasted VALUE for the next 12 months:")
+# Forecast VALUE for the next 3 months
+forecast_value = model_value_fit.forecast(steps=3)
+print("\nForecasted VALUE for the next 3 months using ARIMA:")
 print(forecast_value)
 
 # Calculate error metrics for ARIMA
-mae_value_arima = mean_absolute_error(time_series_data['VALUE'][-12:], forecast_value)
-rmse_value_arima = np.sqrt(mean_squared_error(time_series_data['VALUE'][-12:], forecast_value))
+mae_value_arima = mean_absolute_error(time_series_data['VALUE'][-3:], forecast_value)
+rmse_value_arima = np.sqrt(mean_squared_error(time_series_data['VALUE'][-3:], forecast_value))
 print(f"\nARIMA MAE for VALUE: {mae_value_arima}")
 print(f"ARIMA RMSE for VALUE: {rmse_value_arima}")
 
 # ETS forecasting for VALUE
 model_ets = ExponentialSmoothing(time_series_data['VALUE'], seasonal='add', seasonal_periods=12, initialization_method='estimated')
 model_ets_fit = model_ets.fit()
-forecast_value_ets = model_ets_fit.forecast(steps=12)
+forecast_value_ets = model_ets_fit.forecast(steps=3)
 print("\nETS model summary for VALUE:")
 print(model_ets_fit.summary())
 
 # Calculate error metrics for ETS
-mae_value_ets = mean_absolute_error(time_series_data['VALUE'][-12:], forecast_value_ets)
-rmse_value_ets = np.sqrt(mean_squared_error(time_series_data['VALUE'][-12:], forecast_value_ets))
+mae_value_ets = mean_absolute_error(time_series_data['VALUE'][-3:], forecast_value_ets)
+rmse_value_ets = np.sqrt(mean_squared_error(time_series_data['VALUE'][-3:], forecast_value_ets))
 print(f"\nETS MAE for VALUE: {mae_value_ets}")
 print(f"ETS RMSE for VALUE: {rmse_value_ets}")
 
@@ -186,15 +181,15 @@ print(f"ETS RMSE for VALUE: {rmse_value_ets}")
 df_prophet = time_series_data[['Month-Year', 'VALUE']].rename(columns={'Month-Year': 'ds', 'VALUE': 'y'})
 model_prophet = Prophet()
 model_prophet.fit(df_prophet)
-future = model_prophet.make_future_dataframe(periods=12, freq='M')
+future = model_prophet.make_future_dataframe(periods=3, freq='M')
 forecast_value_prophet = model_prophet.predict(future)
-forecast_value_prophet = forecast_value_prophet[['ds', 'yhat']].tail(12)['yhat']
+forecast_value_prophet = forecast_value_prophet[['ds', 'yhat']].tail(3)['yhat']
 print("\nProphet forecast for VALUE:")
 print(forecast_value_prophet)
 
 # Calculate error metrics for Prophet
-mae_value_prophet = mean_absolute_error(time_series_data['VALUE'][-12:], forecast_value_prophet)
-rmse_value_prophet = np.sqrt(mean_squared_error(time_series_data['VALUE'][-12:], forecast_value_prophet))
+mae_value_prophet = mean_absolute_error(time_series_data['VALUE'][-3:], forecast_value_prophet)
+rmse_value_prophet = np.sqrt(mean_squared_error(time_series_data['VALUE'][-3:], forecast_value_prophet))
 print(f"\nProphet MAE for VALUE: {mae_value_prophet}")
 print(f"Prophet RMSE for VALUE: {rmse_value_prophet}")
 
@@ -204,16 +199,17 @@ print(f"ARIMA MAE: {mae_value_arima}, RMSE: {rmse_value_arima}")
 print(f"ETS MAE: {mae_value_ets}, RMSE: {rmse_value_ets}")
 print(f"Prophet MAE: {mae_value_prophet}, RMSE: {rmse_value_prophet}")
 
-# Identify anomalies using Z-score
-time_series_data['Z_SCORE'] = (time_series_data['VALUE'] - time_series_data['VALUE'].mean()) / time_series_data['VALUE'].std()
-anomalies_z_score = time_series_data[time_series_data['Z_SCORE'].abs() > 3]
-print("\nAnomalies detected using Z-score method:")
-print(anomalies_z_score[['Month-Year', 'VALUE', 'Z_SCORE']])
-
-# Identify anomalies using IQR
-Q1 = time_series_data['VALUE'].quantile(0.25)
-Q3 = time_series_data['VALUE'].quantile(0.75)
-IQR = Q3 - Q1
-anomalies_iqr = time_series_data[(time_series_data['VALUE'] < (Q1 - 1.5 * IQR)) | (time_series_data['VALUE'] > (Q3 + 1.5 * IQR))]
-print("\nAnomalies detected using IQR method:")
-print(anomalies_iqr[['Month-Year', 'VALUE']])
+# Plot the forecasts
+plt.figure(figsize=(14, 7))
+plt.plot(time_series_data['Month-Year'], time_series_data['VALUE'], label='Actual', marker='o')
+plt.plot(pd.date_range(start=time_series_data['Month-Year'].iloc[-1], periods=4, freq='M')[1:], forecast_value, label='ARIMA Forecast', marker='o')
+plt.plot(pd.date_range(start=time_series_data['Month-Year'].iloc[-1], periods=4, freq='M')[1:], forecast_value_ets, label='ETS Forecast', marker='o')
+plt.plot(pd.date_range(start=time_series_data['Month-Year'].iloc[-1], periods=4, freq='M')[1:], forecast_value_prophet, label='Prophet Forecast', marker='o')
+plt.title('3-Month Forecasts of Value using ARIMA, ETS, and Prophet')
+plt.xlabel('Month-Year')
+plt.ylabel('Value')
+plt.legend()
+plt.xticks(rotation=45)
+plt.grid(True)
+plt.tight_layout()
+plt.show()
