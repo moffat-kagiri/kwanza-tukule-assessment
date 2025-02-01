@@ -51,7 +51,7 @@ df['Month-Year'] = df['DATE'].dt.strftime('%B %Y')
 
 # Verify the new feature
 print("\nSample of 'Month-Year' feature:")
-print(df[['DATE', 'Month-Year']].head())
+print(df[['Month-Year', 'DATE']].head())
 
 # Calculate 'VALUE' as 'QUANTITY' * 'UNIT PRICE'
 df['VALUE'] = df['QUANTITY'] * df['UNIT PRICE']
@@ -89,24 +89,33 @@ business_aggregated = business_aggregated.sort_values(by='VALUE', ascending=Fals
 print("\nAggregated data by 'ANONYMIZED BUSINESS':")
 print(business_aggregated)
 
-# Aggregate 'QUANTITY' and 'VALUE' by 'Month-Year'
-time_series_data = df.groupby('Month-Year').agg({'QUANTITY': 'sum', 'VALUE': 'sum'}).reset_index()
+# Aggregate 'QUANTITY' and 'VALUE' by 'DATE'
+time_series_data = df.groupby('DATE').agg({'QUANTITY': 'sum', 'VALUE': 'sum'}).reset_index()
 
-# Convert 'Month-Year' to datetime for plotting
-time_series_data['Month-Year'] = time_series_data['Month-Year'].dt.to_timestamp()
+# Convert 'DATE' to string and remove unwanted characters
+time_series_data['DATE'] = time_series_data['DATE'].astype(str).str.strip()
+
+# Try multiple date formats to handle inconsistencies
+time_series_data['DATE'] = pd.to_datetime(time_series_data['DATE'], errors='coerce')
+
+# Drop any rows where 'DATE' couldn't be converted
+time_series_data = time_series_data.dropna(subset=['DATE'])
+
+# Sort by date
+time_series_data = time_series_data.sort_values(by='DATE')
 
 # Ensure the data is sorted by date
-time_series_data = time_series_data.sort_values(by='Month-Year')
+time_series_data = time_series_data.sort_values(by='DATE')
 
 # Set the theme for the plots
 sns.set_theme(style="darkgrid", palette="dark")
 
 # Plot the time series data
 plt.figure(figsize=(14, 7))
-sns.lineplot(x='Month-Year', y='VALUE', data=time_series_data, marker='o', label='Value', color='darkgreen')
-sns.lineplot(x='Month-Year', y='QUANTITY', data=time_series_data, marker='o', label='Quantity', color='darkblue')
-plt.title('Time Series of Value and Quantity over Month-Year')
-plt.xlabel('Month-Year')
+sns.lineplot(x='DATE', y='VALUE', data=time_series_data, marker='o', label='Value', color='darkgreen')
+sns.lineplot(x='DATE', y='QUANTITY', data=time_series_data, marker='o', label='Quantity', color='darkblue')
+plt.title('Time Series of Value and Quantity over DATE')
+plt.xlabel('DATE')
 plt.ylabel('Value / Quantity')
 plt.legend()
 plt.xticks(rotation=45)
@@ -125,14 +134,6 @@ top_5_products_by_value = df.groupby('ANONYMIZED PRODUCT').agg({'VALUE': 'sum'})
 print("\nTop 5 most valuable products by value:")
 print(top_5_products_by_value)
 
-# K-Means clustering
-kmeans = KMeans(n_clusters=3, random_state=0)
-business_aggregated['CLUSTER'] = kmeans.fit_predict(business_aggregated[['QUANTITY', 'VALUE', 'FREQUENCY']])
-
-# Display the clusters
-print("\nBusiness clusters using K-Means:")
-print(business_aggregated)
-
 # Rule-based classification
 def classify_business(row):
     if row['VALUE'] > business_aggregated['VALUE'].quantile(0.75):
@@ -143,6 +144,14 @@ def classify_business(row):
         return 'Low Value'
 
 business_aggregated['VALUE_CATEGORY'] = business_aggregated.apply(classify_business, axis=1)
+
+# K-Means clustering
+kmeans = KMeans(n_clusters=3, random_state=0)
+business_aggregated['CLUSTER'] = kmeans.fit_predict(business_aggregated[['QUANTITY', 'VALUE', 'FREQUENCY']])
+
+# Display the clusters
+print("\nBusiness clusters using K-Means:")
+print(business_aggregated)
 
 # Display the rule-based classification
 print("\nBusiness classification using rule-based method:")
@@ -180,7 +189,7 @@ print(f"\nETS MAE for VALUE: {mae_value_ets}")
 print(f"ETS RMSE for VALUE: {rmse_value_ets}")
 
 # Prophet forecasting for VALUE
-df_prophet = time_series_data[['Month-Year', 'VALUE']].rename(columns={'Month-Year': 'ds', 'VALUE': 'y'})
+df_prophet = time_series_data[['DATE', 'VALUE']].rename(columns={'DATE': 'ds', 'VALUE': 'y'})
 model_prophet = Prophet()
 model_prophet.fit(df_prophet)
 future = model_prophet.make_future_dataframe(periods=3, freq='MS')
@@ -203,7 +212,7 @@ print(f"Prophet MAE: {mae_value_prophet}, RMSE: {rmse_value_prophet}")
 
 # Create a DataFrame for the forecasts
 forecast_df = pd.DataFrame({
-    'Month-Year': pd.date_range(start=time_series_data['Month-Year'].iloc[-1], periods=4, freq='MS')[1:],
+    'DATE': pd.date_range(start=time_series_data['DATE'].iloc[-1], periods=4, freq='MS')[1:],
     'ARIMA Forecast': forecast_value,
     'ETS Forecast': forecast_value_ets,
     'Prophet Forecast': forecast_value_prophet
@@ -211,12 +220,12 @@ forecast_df = pd.DataFrame({
 
 # Plot the forecasts
 plt.figure(figsize=(14, 7))
-plt.plot(time_series_data['Month-Year'], time_series_data['VALUE'], label='Actual', marker='o')
-plt.plot(forecast_df['Month-Year'], forecast_df['ARIMA Forecast'], label='ARIMA Forecast', marker='o')
-plt.plot(forecast_df['Month-Year'], forecast_df['ETS Forecast'], label='ETS Forecast', marker='o')
-plt.plot(forecast_df['Month-Year'], forecast_df['Prophet Forecast'], label='Prophet Forecast', marker='o')
+plt.plot(time_series_data['DATE'], time_series_data['VALUE'], label='Actual', marker='o')
+plt.plot(forecast_df['DATE'], forecast_df['ARIMA Forecast'], label='ARIMA Forecast', marker='o')
+plt.plot(forecast_df['DATE'], forecast_df['ETS Forecast'], label='ETS Forecast', marker='o')
+plt.plot(forecast_df['DATE'], forecast_df['Prophet Forecast'], label='Prophet Forecast', marker='o')
 plt.title('3-Month Forecasts of Value using ARIMA, ETS, and Prophet')
-plt.xlabel('Month-Year')
+plt.xlabel('DATE')
 plt.ylabel('Value')
 plt.legend()
 plt.xticks(rotation=45)
